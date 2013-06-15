@@ -3,6 +3,8 @@
 #
 # input_engine.coffee
 #
+# See LICENSE for licensing
+#
 
 class InputEngine
     # Useful constants

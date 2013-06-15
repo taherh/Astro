@@ -3,6 +3,8 @@
 #
 # entity.coffee
 #
+# See LICENSE for licensing
+#
 
 util = Asteroids.util
 
