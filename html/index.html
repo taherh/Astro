@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+    <title>Astro!</title>
+    <script src="http://code.jquery.com/jquery-1.10.0.min.js"></script>
+    <script src="http://cdnjs.cloudflare.com/ajax/libs/fabric.js/1.1.0/fabric.all.min.js"></script>
+<!--    <script src="lib/js/jquery.js"></script> -->
+<!--    <script src="lib/js/fabric.all.js"></script> -->
+
+    <script src="js/compat.js"></script>
+    <script src="js/util.js"></script>
+    <script src="js/entity.js"></script>
+    <script src="js/input_engine.js"></script>
+    <script src="js/asteroids.js"></script>
+    
+    <style type="text/css">
+        h1 {
+            text-align: center;
+        }
+        #game {
+            text-align: center;
+        }
+        #canvas {
+            background-color: rgb(0,16,16);
+        }
+        div.controls {
+          margin-top: 16px;
+          text-align: center;
+        }
+    </style>
+</head>
+
+<body id="body">
+    <h1>Welcome to Astro!</h1>
+    
+    <div id="game"></div>
+
+
+    <div class="controls">
+      <input type="button" value="Pause" id="pause" />
+      <input type="button" value="Reset" id="reset" />
+    </div>
+    
+    <h2>Instructions:</h2>
+    <p>Use the arrow keys to move and spacebar to shoot</p>
+</body>
+</html>
