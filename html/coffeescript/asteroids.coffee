@@ -3,7 +3,8 @@
 #
 # asteroids.coffee
 #
-
+# See LICENSE for licensing
+#
 
 class ImageManager
 

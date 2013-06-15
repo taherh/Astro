@@ -3,6 +3,8 @@
 #
 # util.coffee
 #
+# See LICENSE for licensing
+#
 
 window.Asteroids = {} if not window.Asteroids
 
