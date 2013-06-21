@@ -35,9 +35,9 @@ class SoundManager
     mainNode: null
     
     soundMap:
-        shoot: 'assets/sound/shoot.ogg'
-        explosion: 'assets/sound/explosion.ogg'
-        thruster: 'assets/sound/thruster.ogg'
+        shoot: 'assets/sound/shoot.mp3'
+        explosion: 'assets/sound/explosion.mp3'
+        thruster: 'assets/sound/thruster.mp3'
         
     constructor: ->
         @buffers = {}
@@ -122,6 +122,9 @@ class SoundManager
         source.loop = settings.loop
         
         source.connect(@mainNode)
+        
+        if not source.start? then source.start = source.noteOn
+        if not source.stop? then source.stop = source.noteOff
         
         return source
 

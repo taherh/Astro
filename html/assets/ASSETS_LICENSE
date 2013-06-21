@@ -8,6 +8,6 @@ ship.png: http://findicons.com/icon/93546/alienblaster?id=95353
 
 sound:
 ------
-explosion.ogg: http://www.grsites.com/archive/sounds/category/7/
-shoot.ogg: http://www.soundsnap.com/node/55725
-thruster.ogg: http://soundbible.com/1492-Rocket-Thrusters.html
+explosion.{mp3,ogg}: http://www.grsites.com/archive/sounds/category/7/
+shoot.{mp3,ogg}: http://www.soundsnap.com/node/55725
+thruster.{mp3,ogg}: http://soundbible.com/1492-Rocket-Thrusters.html
