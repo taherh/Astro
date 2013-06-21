@@ -28,7 +28,8 @@ class ImageManager
                                     img.clone(callback) if callback)
 
 class SoundManager
-    clips: {}
+    buffers: null
+    pending: null
     enabled: true
     context: null
     mainNode: null
@@ -36,9 +37,12 @@ class SoundManager
     soundMap:
         shoot: 'assets/sound/shoot.ogg'
         explosion: 'assets/sound/explosion.ogg'
-        thruster: 'assets/sound/thruster.mp3'
+        thruster: 'assets/sound/thruster.ogg'
         
     constructor: ->
+        @buffers = {}
+        @pending = {}
+        
         try
             @context = new webkitAudioContext()
         catch e
@@ -47,30 +51,30 @@ class SoundManager
         @mainNode = @context.createGainNode()
         @mainNode.connect(@context.destination)
     
+
+    loadSounds: ->
+        for key of @soundMap
+            @loadSound(key)
+    
     # key: name of sound
-    # callback(sound): callback after sound is loaded
-    loadSound: (sound, callback) ->
-        key = sound.key
-        if sound.key not of @soundMap
+    # callback(key): callback after sound 'key' is loaded
+    loadSound: (key, callback) ->
+        # check that it's a valid sound
+        if key not of @soundMap
             throw "Sound key #{ key } not found"
         
-        if key of @clips
-            sound.clip = @clips[key]
-            if not @clips[key].loaded
-                sound.clip.callbacks.push(callback) if callback
-            else
-                callback(sound) if callback
+        # check if already loaded
+        if key of @buffers
+            callback(key) if callback
             return
         
-        clip =
-            buffer: null
-            loaded: false
-            callbacks: []
+        # check if loading
+        if key of @pending
+            @pending[key].push(callback) if callback
+            return
         
-        clip.callbacks.push(callback) if callback
-        
-        sound.clip = clip
-        @clips[key] = clip
+        @pending[key] = []
+        @pending[key].push(callback) if callback
         
         # jquery doesn't support arraybuffer, so fallback to raw api
         request = new XMLHttpRequest()
@@ -81,28 +85,26 @@ class SoundManager
                 @context.decodeAudioData(request.response,
                                          (buffer) =>
                                             console.log("sound #{ key } loaded")
-                                            clip.buffer = buffer
-                                            clip.loaded = true
-                                            callback(sound) for callback in clip.callbacks
-                                            clip.callback_list = []
+                                            @buffers[key] = buffer
+                                            callback(key) for callback in @pending[key]
+                                            delete @pending[key]
                                           (data) =>
-                                            sound.clip = null
                                             throw "bad buffer for #{ key }")
         request.send()
 
     
-    toggleMute: ->
-        if @mainNode.gain.value > 0
-            @mainNode.gain.value = 0
-        else
-            @mainNode.gain.value = 1
+    mute: ->
+        @mainNode.gain.value = 0
+
+    unmute: ->
+        @mainNode.gain.value = 1
             
     stopAll: ->
         @mainNode.disconnect()
         @mainNode = @context.createGainNode()
         @mainNode.connect(@context.destination)
         
-    playSound: (sound, settings) ->
+    getSoundSource: (key, settings) ->
         if !@enabled then return false
         
         def_settings =
@@ -111,50 +113,56 @@ class SoundManager
         
         settings = $.merge {}, def_settings, settings
         
-        if not sound.clip?.loaded
-            throw "Sound #{ sound.key } not loaded"
+        if not key in @buffers
+            throw "Sound #{ key } not loaded"
         
         source = @context.createBufferSource()
-        source.buffer = sound.clip.buffer
+        source.buffer = @buffers[key]
         source.gain.value = settings.volume
-        source.loop = settings.looping
+        source.loop = settings.loop
         
         source.connect(@mainNode)
-        source.start(0)
-
+        
         return source
 
+# Create a new sound object each time you want to play a sound.
+# If you have a looping sound you want to pause and restart, you can
+# reuse the same Sound object.
 class Sound
     key: null
-    clip: null
+    looping: null
+    volume: null
     source: null
+    
     playing: false
     
-    constructor: (key) ->
+    constructor: (key, @looping=false, @volume=0.5) ->
         @key = key
+        @load()
     
     load: (callback) ->
-        gGame.soundManager.loadSound(this, callback)
+        gGame.soundManager.loadSound(@key, callback)
         
-    play: (looping, volume) ->
-        raw_play = () =>
-            source = gGame.soundManager.playSound(this, {looping: looping, volume: volume})
-            playing = true
+    # wrap the real play (_play()) in a load() call to ensure sound was loaded
+    # calling play on an already playing Sound object has no effect
+    play: () ->
+        if not @playing or (@source? and @source.playbackState == @source.FINISHED_STATE)
+            @playing = true
+            @load(() => @_play(@loop, @volume))
+        
+    _play: (looping, volume) ->
+        @source = gGame.soundManager.getSoundSource(@key, { loop: looping, volume: volume })
+        @source.start(0)
     
-        if @clip?.loaded
-            raw_play()
-        else
-            @load(callback=raw_play)
-    
-    start:
-        source?.start(0)
-    stop:
-        source?.stop(0)
+    stop: ->
+        @source?.stop(0)
+        @source = null
+        @playing = false
 
 class AsteroidsGameEngine
     GAME_WIDTH: 640
     GAME_HEIGHT: 480
-    SHOOT_RATE: 3
+    SHOOT_RATE: 5
     
     canvas: null    
     
@@ -165,6 +173,7 @@ class AsteroidsGameEngine
     prevTime: null
     lastShootTime: 0
 
+    paused: false
     gameOver: false
     
     constructor: ->
@@ -184,10 +193,10 @@ class AsteroidsGameEngine
         @inputEngine = new InputEngine()
     
         # pre-load sound and image assets
-        @soundManager.loadSound(new Sound('shoot'))
-        @soundManager.loadSound(new Sound('explosion'))
-        @soundManager.loadSound(new Sound('thruster'))
+        @soundManager.loadSounds()
+        @imageManager.loadImage('ship')
         @imageManager.loadImage('asteroid')
+        @imageManager.loadImage('bullet')
 
         $(document).on('click', '#resume', @resumeGame)
         $(document).on('click', '#pause', @pauseGame)
@@ -226,12 +235,18 @@ class AsteroidsGameEngine
         @resumeGame()
 
     resumeGame: =>
+        @soundManager.unmute()
+        @paused = false
         @animRequest = requestAnimationFrame(gGame.step)
         $('#resume').attr('id', 'pause')
                     .attr('value', 'Pause')
 
     pauseGame: =>
         return if @gameOver
+        
+        @paused = true
+        
+        @soundManager.mute()
         
         @prevTime = null
         if @animRequest? then cancelAnimationFrame(@animRequest)
@@ -258,13 +273,14 @@ class AsteroidsGameEngine
             velX = Math.random()*200 - 100 + 50
             velY = Math.random()*200 - 100 + 50
 
-            console.log("x=#{x}; y=#{y}")
             @addAsteroid(x, y, velX, velY)
             
     addAsteroid: (x, y, velX, velY) ->
         @entities['asteroid'].push(new Asteroid(x, y, velX, velY))
 
     step: (ts) =>
+        return if @paused or @gameOver
+
         if not @prevTime
             @prevTime = ts
             @animRequest = requestAnimationFrame(@step)
@@ -273,24 +289,36 @@ class AsteroidsGameEngine
         curTime = ts
         deltaTime = curTime - @prevTime
         
+        # handle any events (such as shooting)
         @handleEvents(curTime, deltaTime)
+
+        # detect any collisions
         @detectCollisions()
-        
+
+        # detect if we won
+        @detectWin()
+                
+        # update all the entities and render them
         for key, entityList of @entities
             for entity in entityList
                 entity.update(deltaTime)
                 entity.render()
 
+        # render the canvas
         @canvas.renderAll()
-        
+
+        # remove destroyed entities from entity list if necessary
         for entity in @pendingDestroyList
-            @canvas.remove(entity)
             util.remove(@entities[entity.key], entity)
             @pendingDestroyList = []
 
         @prevTime = curTime
         @animRequest = requestAnimationFrame(@step) unless @gameOver
 
+    detectWin: ->
+        if @entities['asteroid'].length == 0
+            @endGame('win')
+            
     detectCollisions: ->
         # ship<->asteroid
         for asteroid in @entities['asteroid']
@@ -301,13 +329,16 @@ class AsteroidsGameEngine
         for bullet in @entities['bullet']
             for asteroid in @entities['asteroid']
                 if bullet.collidesWith(asteroid)
-                    console.log('asteroid hit!')
                     @collideBulletAsteroid(bullet, asteroid)
 
-    endGame: ->
+    endGame: (state) ->
         @gameOver = true
         $('#canvas').off('.asteroids')
-        @canvas.add(new fabric.Text('Game Over!', {
+        if state is "win"
+            text = 'You won!'
+        else
+            text = 'Game Over!'
+        @canvas.add(new fabric.Text(text, {
                 top: @GAME_HEIGHT / 2
                 left: @GAME_WIDTH / 2
                 fill: '#ffffff'
@@ -316,26 +347,25 @@ class AsteroidsGameEngine
 
     collideShip: (asteroid) ->
         @destroy(@ship)
-        (new Sound('explosion')).play(false, 1)
-        @endGame()
+        (new Sound('explosion')).play()
+        @endGame('lose')
         
     collideBulletAsteroid: (bullet, asteroid) ->
         @destroy(bullet)
         @destroy(asteroid)
-        (new Sound('explosion')).play(false, 0.2)
+        (new Sound('explosion')).play()
         
     # handle any events that aren't handled by the entities themselves
     # (e.g., spawning of new entities)
-
     handleEvents: (curTime, deltaTime) ->
         if @inputEngine.actionState['shoot']
             if curTime - @lastShootTime > 1000/@SHOOT_RATE
                 @entities['bullet'].push(new Bullet(@ship))
-                (new Sound('shoot')).play(false, 0.2)
+                (new Sound('shoot')).play()
                 @lastShootTime = curTime
 
     destroy: (entity) ->
-        entity.destroy = true
+        entity.destroy()
         @pendingDestroyList.push(entity)
 
 util = null

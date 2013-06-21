@@ -15,9 +15,9 @@ class Entity
     
     img: null
     
-    destroy: false
+    destroyed: false
     
-    constructor: (x, y, vel_x = 0, vel_y = 0, orientation = 0) ->
+    constructor: (x, y, vel_x=0, vel_y=0, orientation=0) ->
         @pos = {}
         @vel = {}
         
@@ -29,13 +29,13 @@ class Entity
         gGame.imageManager.loadImage(@key, @setImage)
         
     setImage: (img) =>
-        unless @destroy
+        unless @destroyed
             @img = img
             @render()
             gGame.canvas.add(@img)
         
     render: =>
-        if @destroy and @img?
+        if @destroyed and @img?
             gGame.canvas.remove(@img)
             @img = null
             return
@@ -49,6 +49,8 @@ class Entity
             ).setCoords()  # setCoords() will update bounding box
         
     update: (deltaTime) ->
+        return if @destroyed
+        
         deltaX = deltaTime/1000 * @vel.x
         deltaY = deltaTime/1000 * @vel.y
         
@@ -84,6 +86,9 @@ class Entity
             return this.img.intersectsWithObject(other.img)
         else
             return false
+        
+    destroy: ->
+        @destroyed = true
 
 class Ship extends Entity
     ACCEL_INCR = 1/10
@@ -96,9 +101,11 @@ class Ship extends Entity
 
     constructor: (x, y, x_vel, y_vel) ->
         super
-        thrusterSound = new Sound('thruster')
+        @thrusterSound = new Sound('thruster', true)
     
     update: (deltaTime) ->
+        return if @destroyed
+        
         actionState = gGame.inputEngine.actionState
         if actionState['turn-left']
             @rotateLeft(deltaTime)
@@ -112,6 +119,7 @@ class Ship extends Entity
         if not actionState['decelerate'] and
            not actionState['accelerate']
             @decelerate(deltaTime, "coast")
+            
         super(deltaTime)
 
     rotateRight: (deltaTime) ->
@@ -135,11 +143,15 @@ class Ship extends Entity
             @vel.x = Math.cos(cur_vel_angle) * MAX_SPEED
             @vel.y = Math.sin(cur_vel_angle) * MAX_SPEED
             
+        @thrusterSound.play()
+            
     decelerate: (deltaTime, type) ->
         if type == "coast"
-            incr = ACCEL_INCR/2
+            incr = ACCEL_INCR/4
         else
             incr = ACCEL_INCR
+
+        @thrusterSound.stop()
             
         speed = Math.sqrt(Math.pow(@vel.x, 2) + Math.pow(@vel.y, 2))
         speed -= incr * deltaTime
@@ -148,6 +160,10 @@ class Ship extends Entity
         cur_vel_angle = util.getAngle(@vel.y, @vel.x)
         @vel.x = Math.cos(cur_vel_angle) * speed
         @vel.y = Math.sin(cur_vel_angle) * speed
+        
+    destroy: ->
+        @thrusterSound.stop()
+        super
     
 class Asteroid extends Entity
     key: 'asteroid'
