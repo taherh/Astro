@@ -44,7 +44,7 @@ class SoundManager
         @pending = {}
         
         try
-            @context = new webkitAudioContext()
+            @context = new AudioContext()
         catch e
             alert(e)
         
