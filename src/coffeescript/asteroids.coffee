@@ -33,6 +33,7 @@ class SoundManager
     enabled: true
     context: null
     mainNode: null
+    defaultVolume: 0.5
     
     soundMap:
         shoot: 'assets/sound/shoot.mp3'
@@ -48,8 +49,9 @@ class SoundManager
         catch e
             alert(e)
         
-        @mainNode = @context.createGainNode()
+        @mainNode = @context.createGain()
         @mainNode.connect(@context.destination)
+        @mainNode.gain.value = @defaultVolume
     
 
     loadSounds: ->
@@ -97,12 +99,13 @@ class SoundManager
         @mainNode.gain.value = 0
 
     unmute: ->
-        @mainNode.gain.value = 1
+        @mainNode.gain.value = @defaultVolume
             
     stopAll: ->
         @mainNode.disconnect()
-        @mainNode = @context.createGainNode()
+        @mainNode = @context.createGain()
         @mainNode.connect(@context.destination)
+        @mainNode.gain.value = @defaultVolume
         
     getSoundSource: (key, settings) ->
         if !@enabled then return false
@@ -118,10 +121,14 @@ class SoundManager
         
         source = @context.createBufferSource()
         source.buffer = @buffers[key]
-        source.gain.value = settings.volume
-        source.loop = settings.loop
+        source.loop = settings.looping
         
-        source.connect(@mainNode)
+        # handle volume level with a gain node
+        gainNode = @context.createGain()
+        gainNode.connect(@mainNode)
+        gainNode.gain.value = settings.volume
+        
+        source.connect(gainNode)
         
         if not source.start? then source.start = source.noteOn
         if not source.stop? then source.stop = source.noteOff
@@ -149,16 +156,18 @@ class Sound
     # wrap the real play (_play()) in a load() call to ensure sound was loaded
     # calling play on an already playing Sound object has no effect
     play: () ->
-        if not @playing or (@source? and @source.playbackState == @source.FINISHED_STATE)
+        if not @playing
             @playing = true
-            @load(() => @_play(@loop, @volume))
+            @load(() => @_play(@looping, @volume))
         
     _play: (looping, volume) ->
-        @source = gGame.soundManager.getSoundSource(@key, { loop: looping, volume: volume })
+        @source = gGame.soundManager.getSoundSource(@key, { looping: looping, volume: volume })
+        @source.onended = ( () => @playing = false )
         @source.start(0)
-    
+
     stop: ->
-        @source?.stop(0)
+        if @playing
+            @source.stop(0)
         @source = null
         @playing = false
 
