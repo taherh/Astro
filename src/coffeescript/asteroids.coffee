@@ -113,9 +113,8 @@ class SoundManager
         def_settings =
             looping: false
             volume: 0.2
-        
-        settings = $.merge {}, def_settings, settings
-        
+
+        settings = $.extend {}, def_settings, settings
         if not key in @buffers
             throw "Sound #{ key } not loaded"
         
